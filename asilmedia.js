@@ -1,16 +1,14 @@
-// Asilmedia плагин для Lampa - ФИНАЛЬНАЯ ВЕРСИЯ
-// Версия 8.0 - использует прокси как есть
+// Asilmedia плагин для Lampa - HTTPS ВЕРСИЯ
+// Версия 9.0 - использует HTTPS прокси
 
 (function() {
-    console.log('🚀 Asilmedia: Запуск плагина (финальная версия)');
+    console.log('🚀 Asilmedia: Запуск плагина (HTTPS версия)');
     
     function getSearchTitle(movieData) {
-        // Пробуем оригинальное название (английское)
         if (movieData.original_title) {
             console.log('📝 Оригинальное название:', movieData.original_title);
             return movieData.original_title;
         }
-        console.log('⚠️ Русское название:', movieData.title);
         return movieData.title;
     }
     
@@ -20,13 +18,12 @@
         let activity = Lampa.Activity.active();
         if (activity && activity.loader) activity.loader(true);
         
-        // ИСПОЛЬЗУЕМ ПРОКСИ КАК ЕСТЬ - без добавления домена
-        let baseProxy = 'http://cors.byskaz.ru/asilmedia.org';
+        // ИСПРАВЛЕНО: используем HTTPS версию прокси
+        let baseProxy = 'https://cors.byskaz.ru/asilmedia.org';
         let searchTitle = getSearchTitle(movieData);
         
         console.log('🔎 Ищем как:', searchTitle);
         
-        // Формируем URL для поиска
         let searchUrl = baseProxy + '/?do=search&subaction=search&story=' + encodeURIComponent(searchTitle);
         
         console.log('📡 Запрос через прокси:', searchUrl);
@@ -38,7 +35,6 @@
             console.log('✅ Получен ответ, длина:', html ? html.length : 0);
             
             if (html && html.length > 1000) {
-                // Сохраняем для отладки
                 console.log('📄 Первые 500 символов:', html.substring(0, 500));
                 
                 // Ищем ссылки на фильмы
@@ -50,7 +46,6 @@
                         let urlMatch = match.match(/href="([^"]+)"/i);
                         if (urlMatch && urlMatch[1]) {
                             let url = urlMatch[1];
-                            // Фильтруем только ссылки на фильмы
                             if ((url.includes('/film/') || url.includes('.html')) && 
                                 !url.includes('do=') && url.length > 10) {
                                 if (!links.includes(url)) links.push(url);
@@ -62,13 +57,11 @@
                 console.log('🔗 Найдено ссылок на фильмы:', links.length);
                 
                 if (links.length > 0) {
-                    // Берем первую ссылку
                     let filmPath = links[0];
                     if (!filmPath.startsWith('http')) {
                         filmPath = (filmPath.startsWith('/') ? '' : '/') + filmPath;
                     }
                     
-                    // ИСПОЛЬЗУЕМ ПРОКСИ + ПУТЬ
                     let filmUrl = baseProxy + filmPath;
                     console.log('🎬 Переходим по ссылке:', filmUrl);
                     Lampa.Noty.show('Фильм найден! Загружаем...');
@@ -97,7 +90,6 @@
             console.log('✅ Страница загружена, длина:', html.length);
             
             if (html && html.length > 1000) {
-                // Ищем плеер
                 let playerMatch = html.match(/<iframe[^>]+src="([^"]+player[^"]*)"[^>]*>/i) ||
                                  html.match(/player\.php[^"'\s]+/i);
                 
@@ -107,15 +99,13 @@
                         playerPath = (playerPath.startsWith('/') ? '' : '/') + playerPath;
                     }
                     
-                    // ФОРМИРУЕМ URL ДЛЯ ПЛЕЕРА
-                    let baseProxy = 'http://cors.byskaz.ru/asilmedia.org';
+                    let baseProxy = 'https://cors.byskaz.ru/asilmedia.org';
                     let playerUrl = baseProxy + playerPath;
                     console.log('🎮 Загружаем плеер:', playerUrl);
                     loadPlayerPage(playerUrl, movieData, network, activity);
                     return;
                 }
                 
-                // Ищем прямую ссылку на видео
                 let directMatch = html.match(/<source[^>]+src="([^"]+\.(mp4|m3u8)[^"]*)"[^>]*>/i) ||
                                 html.match(/file:\s*["']([^"']+\.(mp4|m3u8)[^"']*)["']/i);
                 
@@ -168,7 +158,6 @@
     function playVideo(url, title) {
         console.log('▶️ Запуск видео:', url);
         
-        // Если ссылка относительная, добавляем базовый URL
         if (!url.startsWith('http')) {
             url = 'http://asilmedia.org' + (url.startsWith('/') ? '' : '/') + url;
         }
@@ -179,7 +168,6 @@
         });
     }
 
-    // Функция добавления кнопки
     function addButton() {
         Lampa.Listener.follow('full', function(event) {
             if (event.type === 'complite' && event.data && event.data.movie) {
@@ -211,7 +199,6 @@
         });
     }
 
-    // Запуск
     function init() {
         if (window.Lampa && Lampa.Listener) {
             addButton();
