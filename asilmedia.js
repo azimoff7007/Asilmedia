@@ -27,7 +27,7 @@
         
         // ИСПОЛЬЗУЕМ РАБОЧИЙ ПРОКСИ
         let baseProxy = 'http://cors.byskaz.ru/';
-        let baseUrl = 'https://asilmedia.org';
+        let baseUrl = 'http://asilmedia.org';
         let searchTitle = getSearchTitle(movieData);
         
         console.log('🔎 Ищем как:', searchTitle);
