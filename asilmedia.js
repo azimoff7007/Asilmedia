@@ -1,8 +1,21 @@
-// Asilmedia плагин для Lampa - HTTPS ВЕРСИЯ
-// Версия 9.0 - использует HTTPS прокси
+// Asilmedia плагин для Lampa - УНИВЕРСАЛЬНАЯ ВЕРСИЯ
+// Версия 10.0 - пробует разные прокси
 
 (function() {
-    console.log('🚀 Asilmedia: Запуск плагина (HTTPS версия)');
+    console.log('🚀 Asilmedia: Запуск плагина');
+    
+    // Список прокси для пробования
+    const proxies = [
+        'https://api.allorigins.win/raw?url=http://asilmedia.org',
+        'https://corsproxy.io/?http://asilmedia.org',
+        'https://thingproxy.freeboard.io/fetch/http://asilmedia.org',
+        'https://cors-anywhere.herokuapp.com/http://asilmedia.org'
+    ];
+    
+    let currentProxyIndex = 0;
+    let currentNetwork = null;
+    let currentActivity = null;
+    let currentMovieData = null;
     
     function getSearchTitle(movieData) {
         if (movieData.original_title) {
@@ -12,31 +25,29 @@
         return movieData.title;
     }
     
-    function searchOnAsilmedia(movieData) {
-        console.log('🔍 Поиск на Asilmedia для:', movieData.title);
+    function tryNextProxy() {
+        if (currentProxyIndex >= proxies.length) {
+            console.log('❌ Все прокси перепробованы');
+            if (currentActivity && currentActivity.loader) currentActivity.loader(false);
+            Lampa.Noty.show('Не удалось подключиться к Asilmedia');
+            return;
+        }
         
-        let activity = Lampa.Activity.active();
-        if (activity && activity.loader) activity.loader(true);
+        let proxy = proxies[currentProxyIndex];
+        currentProxyIndex++;
         
-        // ИСПРАВЛЕНО: используем HTTPS версию прокси
-        let baseProxy = 'https://cors.byskaz.ru/asilmedia.org';
-        let searchTitle = getSearchTitle(movieData);
+        let searchTitle = getSearchTitle(currentMovieData);
+        let searchUrl = proxy + '/?do=search&subaction=search&story=' + encodeURIComponent(searchTitle);
         
-        console.log('🔎 Ищем как:', searchTitle);
+        console.log(`📡 Пробуем прокси ${currentProxyIndex}:`, proxy);
+        console.log('📡 URL:', searchUrl);
         
-        let searchUrl = baseProxy + '/?do=search&subaction=search&story=' + encodeURIComponent(searchTitle);
+        currentNetwork = new Lampa.Reguest();
         
-        console.log('📡 Запрос через прокси:', searchUrl);
-        Lampa.Noty.show('Ищем на Asilmedia...');
-        
-        let network = new Lampa.Reguest();
-        
-        network.silent(searchUrl, function(html) {
-            console.log('✅ Получен ответ, длина:', html ? html.length : 0);
+        currentNetwork.silent(searchUrl, function(html) {
+            console.log(`✅ Прокси ${currentProxyIndex} ответил, длина:`, html ? html.length : 0);
             
             if (html && html.length > 1000) {
-                console.log('📄 Первые 500 символов:', html.substring(0, 500));
-                
                 // Ищем ссылки на фильмы
                 let links = [];
                 let linkMatches = html.match(/<a[^>]+href="([^"]+)"[^>]*>/gi);
@@ -62,25 +73,36 @@
                         filmPath = (filmPath.startsWith('/') ? '' : '/') + filmPath;
                     }
                     
-                    let filmUrl = baseProxy + filmPath;
+                    // Для загрузки страницы используем тот же прокси
+                    let filmUrl = proxy + filmPath;
                     console.log('🎬 Переходим по ссылке:', filmUrl);
                     Lampa.Noty.show('Фильм найден! Загружаем...');
-                    loadFilmPage(filmUrl, movieData, network, activity);
+                    loadFilmPage(filmUrl, currentMovieData, currentNetwork, currentActivity);
                 } else {
-                    console.log('❌ Фильм не найден');
-                    if (activity && activity.loader) activity.loader(false);
-                    Lampa.Noty.show('Фильм не найден на Asilmedia');
+                    console.log('❌ Фильм не найден, пробуем следующий прокси');
+                    tryNextProxy();
                 }
             } else {
-                console.log('❌ Пустой ответ');
-                if (activity && activity.loader) activity.loader(false);
-                Lampa.Noty.show('Сайт не отвечает');
+                console.log('❌ Пустой ответ, пробуем следующий прокси');
+                tryNextProxy();
             }
         }, function(error) {
-            console.log('❌ Ошибка:', error);
-            if (activity && activity.loader) activity.loader(false);
-            Lampa.Noty.show('Ошибка соединения');
+            console.log(`❌ Прокси ${currentProxyIndex} не работает:`, error);
+            tryNextProxy();
         }, false, { dataType: 'text' });
+    }
+    
+    function searchOnAsilmedia(movieData) {
+        console.log('🔍 Поиск на Asilmedia для:', movieData.title);
+        
+        currentActivity = Lampa.Activity.active();
+        if (currentActivity && currentActivity.loader) currentActivity.loader(true);
+        
+        currentMovieData = movieData;
+        currentProxyIndex = 0;
+        
+        Lampa.Noty.show('Ищем на Asilmedia...');
+        tryNextProxy();
     }
     
     function loadFilmPage(url, movieData, network, activity) {
@@ -99,8 +121,9 @@
                         playerPath = (playerPath.startsWith('/') ? '' : '/') + playerPath;
                     }
                     
-                    let baseProxy = 'https://cors.byskaz.ru/asilmedia.org';
-                    let playerUrl = baseProxy + playerPath;
+                    // Для плеера используем тот же прокси
+                    let proxy = url.split('/').slice(0, 3).join('/'); // Берем базовый URL прокси
+                    let playerUrl = proxy + playerPath;
                     console.log('🎮 Загружаем плеер:', playerUrl);
                     loadPlayerPage(playerUrl, movieData, network, activity);
                     return;
