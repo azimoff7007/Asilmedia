@@ -1,6 +1,6 @@
 // Asilmedia плагин для Lampa - отдельная кнопка
 // Версия 1.0
-// GitHub: https://github.com/Вazimoff7007/lampa-asilmedia-plugin
+// GitHub: https://github.com/asilmedia/lampa-asilmedia-plugin
 
 (function() {
     // Проверяем загрузку Lampa
