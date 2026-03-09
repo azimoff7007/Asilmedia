@@ -1,18 +1,15 @@
-// Asilmedia плагин для Lampa - РАБОЧАЯ ВЕРСИЯ
-// Версия 7.0 - использует cors.byskaz.ru
+// Asilmedia плагин для Lampa - ФИНАЛЬНАЯ ВЕРСИЯ
+// Версия 8.0 - использует прокси как есть
 
 (function() {
-    console.log('🚀 Asilmedia: Запуск плагина');
+    console.log('🚀 Asilmedia: Запуск плагина (финальная версия)');
     
-    // Функция для получения названия для поиска
     function getSearchTitle(movieData) {
-        // Пробуем оригинальное название (английское) - на сайте много английских названий
+        // Пробуем оригинальное название (английское)
         if (movieData.original_title) {
             console.log('📝 Оригинальное название:', movieData.original_title);
             return movieData.original_title;
         }
-        
-        // В крайнем случае - русское
         console.log('⚠️ Русское название:', movieData.title);
         return movieData.title;
     }
@@ -21,53 +18,45 @@
         console.log('🔍 Поиск на Asilmedia для:', movieData.title);
         
         let activity = Lampa.Activity.active();
-        if (activity && activity.loader) {
-            activity.loader(true);
-        }
+        if (activity && activity.loader) activity.loader(true);
         
-        // ИСПОЛЬЗУЕМ РАБОЧИЙ ПРОКСИ
-        let baseProxy = 'http://cors.byskaz.ru/';
-        let baseUrl = 'asilmedia.org';
+        // ИСПОЛЬЗУЕМ ПРОКСИ КАК ЕСТЬ - без добавления домена
+        let baseProxy = 'http://cors.byskaz.ru/asilmedia.org';
         let searchTitle = getSearchTitle(movieData);
         
         console.log('🔎 Ищем как:', searchTitle);
         
         // Формируем URL для поиска
-        let searchPath = '/?do=search&subaction=search&story=' + encodeURIComponent(searchTitle);
-        let fullUrl = baseProxy + baseUrl + searchPath;
+        let searchUrl = baseProxy + '/?do=search&subaction=search&story=' + encodeURIComponent(searchTitle);
         
-        console.log('📡 Запрос через прокси:', fullUrl);
+        console.log('📡 Запрос через прокси:', searchUrl);
         Lampa.Noty.show('Ищем на Asilmedia...');
         
         let network = new Lampa.Reguest();
         
-        network.silent(fullUrl, function(html) {
+        network.silent(searchUrl, function(html) {
             console.log('✅ Получен ответ, длина:', html ? html.length : 0);
             
             if (html && html.length > 1000) {
-                // Сохраняем часть HTML для отладки
+                // Сохраняем для отладки
                 console.log('📄 Первые 500 символов:', html.substring(0, 500));
                 
-                // Ищем ссылки на фильмы в результатах поиска
+                // Ищем ссылки на фильмы
                 let links = [];
+                let linkMatches = html.match(/<a[^>]+href="([^"]+)"[^>]*>/gi);
                 
-                // Паттерны для поиска ссылок на asilmedia.org
-                let patterns = [
-                    /<a[^>]+href="([^"]+)"[^>]*class="[^"]*title[^"]*"[^>]*>/gi,
-                    /<h2[^>]*><a[^>]+href="([^"]+)"[^>]*>/gi,
-                    /<div[^>]*class="[^"]*short-story[^"]*"[^>]*>[\s\S]*?<a[^>]+href="([^"]+)"[^>]*>/gi
-                ];
-                
-                for (let pattern of patterns) {
-                    let matches = html.matchAll(pattern);
-                    for (let match of matches) {
-                        if (match[1] && !links.includes(match[1])) {
-                            // Фильтруем только ссылки на фильмы (не на страницы типа "do=search")
-                            if (!match[1].includes('do=') && match[1].length > 10) {
-                                links.push(match[1]);
+                if (linkMatches) {
+                    linkMatches.forEach(function(match) {
+                        let urlMatch = match.match(/href="([^"]+)"/i);
+                        if (urlMatch && urlMatch[1]) {
+                            let url = urlMatch[1];
+                            // Фильтруем только ссылки на фильмы
+                            if ((url.includes('/film/') || url.includes('.html')) && 
+                                !url.includes('do=') && url.length > 10) {
+                                if (!links.includes(url)) links.push(url);
                             }
                         }
-                    }
+                    });
                 }
                 
                 console.log('🔗 Найдено ссылок на фильмы:', links.length);
@@ -79,10 +68,11 @@
                         filmPath = (filmPath.startsWith('/') ? '' : '/') + filmPath;
                     }
                     
-                    let filmUrl = baseProxy + baseUrl + filmPath;
+                    // ИСПОЛЬЗУЕМ ПРОКСИ + ПУТЬ
+                    let filmUrl = baseProxy + filmPath;
                     console.log('🎬 Переходим по ссылке:', filmUrl);
                     Lampa.Noty.show('Фильм найден! Загружаем...');
-                    loadFilmPage(filmUrl, movieData, network, baseProxy, baseUrl, activity);
+                    loadFilmPage(filmUrl, movieData, network, activity);
                 } else {
                     console.log('❌ Фильм не найден');
                     if (activity && activity.loader) activity.loader(false);
@@ -100,7 +90,7 @@
         }, false, { dataType: 'text' });
     }
     
-    function loadFilmPage(url, movieData, network, proxy, baseUrl, activity) {
+    function loadFilmPage(url, movieData, network, activity) {
         console.log('📄 Загрузка страницы фильма:', url);
         
         network.silent(url, function(html) {
@@ -109,8 +99,7 @@
             if (html && html.length > 1000) {
                 // Ищем плеер
                 let playerMatch = html.match(/<iframe[^>]+src="([^"]+player[^"]*)"[^>]*>/i) ||
-                                 html.match(/player\.php[^"'\s]+/i) ||
-                                 html.match(/src="([^"]*\/engine\/player\/[^"]*)"/i);
+                                 html.match(/player\.php[^"'\s]+/i);
                 
                 if (playerMatch) {
                     let playerPath = playerMatch[1] || playerMatch[0];
@@ -118,7 +107,9 @@
                         playerPath = (playerPath.startsWith('/') ? '' : '/') + playerPath;
                     }
                     
-                    let playerUrl = proxy + baseUrl + playerPath;
+                    // ФОРМИРУЕМ URL ДЛЯ ПЛЕЕРА
+                    let baseProxy = 'http://cors.byskaz.ru/asilmedia.org';
+                    let playerUrl = baseProxy + playerPath;
                     console.log('🎮 Загружаем плеер:', playerUrl);
                     loadPlayerPage(playerUrl, movieData, network, activity);
                     return;
@@ -126,7 +117,6 @@
                 
                 // Ищем прямую ссылку на видео
                 let directMatch = html.match(/<source[^>]+src="([^"]+\.(mp4|m3u8)[^"]*)"[^>]*>/i) ||
-                                html.match(/<video[^>]+src="([^"]+\.(mp4|m3u8)[^"]*)"[^>]*>/i) ||
                                 html.match(/file:\s*["']([^"']+\.(mp4|m3u8)[^"']*)["']/i);
                 
                 if (directMatch && directMatch[1]) {
@@ -134,7 +124,7 @@
                     playVideo(directMatch[1], movieData.title);
                     if (activity && activity.loader) activity.loader(false);
                 } else {
-                    console.log('❌ Плеер не найден на странице');
+                    console.log('❌ Плеер не найден');
                     if (activity && activity.loader) activity.loader(false);
                     Lampa.Noty.show('Плеер не найден');
                 }
@@ -153,10 +143,8 @@
             console.log('✅ Плеер загружен, длина:', html.length);
             
             if (html && html.length > 100) {
-                // Ищем видео в коде плеера
                 let videoMatch = html.match(/file["']?\s*:\s*["']([^"']+\.(mp4|m3u8)[^"']*)["']/i) ||
-                                html.match(/<source[^>]+src="([^"]+\.(mp4|m3u8)[^"]*)"[^>]*>/i) ||
-                                html.match(/src:\s*['"]([^'"]+\.(mp4|m3u8)[^'"]*)['"]/i);
+                                html.match(/<source[^>]+src="([^"]+\.(mp4|m3u8)[^"]*)"[^>]*>/i);
                 
                 if (videoMatch && videoMatch[1]) {
                     console.log('✅ Видео найдено в плеере!');
@@ -180,9 +168,9 @@
     function playVideo(url, title) {
         console.log('▶️ Запуск видео:', url);
         
-        // Проверяем, нужно ли добавить прокси к видео URL
+        // Если ссылка относительная, добавляем базовый URL
         if (!url.startsWith('http')) {
-            url = 'https://asilmedia.org' + (url.startsWith('/') ? '' : '/') + url;
+            url = 'http://asilmedia.org' + (url.startsWith('/') ? '' : '/') + url;
         }
         
         Lampa.Player.play({
