@@ -1,15 +1,12 @@
-// Asilmedia плагин для Lampa - УНИВЕРСАЛЬНАЯ ВЕРСИЯ
-// Версия 10.0 - пробует разные прокси
+// Asilmedia плагин для Lampa - РАБОЧАЯ ВЕРСИЯ
+// Версия 11.0 - пробует все найденные ссылки
 
 (function() {
     console.log('🚀 Asilmedia: Запуск плагина');
     
-    // Список прокси для пробования
     const proxies = [
-        'https://api.allorigins.win/raw?url=http://asilmedia.org',
         'https://corsproxy.io/?http://asilmedia.org',
-        'https://thingproxy.freeboard.io/fetch/http://asilmedia.org',
-        'https://cors-anywhere.herokuapp.com/http://asilmedia.org'
+        'https://api.allorigins.win/raw?url=http://asilmedia.org'
     ];
     
     let currentProxyIndex = 0;
@@ -40,7 +37,6 @@
         let searchUrl = proxy + '/?do=search&subaction=search&story=' + encodeURIComponent(searchTitle);
         
         console.log(`📡 Пробуем прокси ${currentProxyIndex}:`, proxy);
-        console.log('📡 URL:', searchUrl);
         
         currentNetwork = new Lampa.Reguest();
         
@@ -48,7 +44,7 @@
             console.log(`✅ Прокси ${currentProxyIndex} ответил, длина:`, html ? html.length : 0);
             
             if (html && html.length > 1000) {
-                // Ищем ссылки на фильмы
+                // Ищем ВСЕ ссылки на странице
                 let links = [];
                 let linkMatches = html.match(/<a[^>]+href="([^"]+)"[^>]*>/gi);
                 
@@ -57,33 +53,29 @@
                         let urlMatch = match.match(/href="([^"]+)"/i);
                         if (urlMatch && urlMatch[1]) {
                             let url = urlMatch[1];
-                            if ((url.includes('/film/') || url.includes('.html')) && 
-                                !url.includes('do=') && url.length > 10) {
+                            // Исключаем служебные ссылки
+                            if (!url.includes('do=') && 
+                                !url.includes('#') && 
+                                !url.includes('javascript') &&
+                                url.length > 10) {
                                 if (!links.includes(url)) links.push(url);
                             }
                         }
                     });
                 }
                 
-                console.log('🔗 Найдено ссылок на фильмы:', links.length);
+                console.log('🔗 Найдено ссылок (всего):', links.length);
+                console.log('📋 Первые 10 ссылок:', links.slice(0, 10));
                 
                 if (links.length > 0) {
-                    let filmPath = links[0];
-                    if (!filmPath.startsWith('http')) {
-                        filmPath = (filmPath.startsWith('/') ? '' : '/') + filmPath;
-                    }
-                    
-                    // Для загрузки страницы используем тот же прокси
-                    let filmUrl = proxy + filmPath;
-                    console.log('🎬 Переходим по ссылке:', filmUrl);
-                    Lampa.Noty.show('Фильм найден! Загружаем...');
-                    loadFilmPage(filmUrl, currentMovieData, currentNetwork, currentActivity);
+                    // Пробуем каждую ссылку по очереди
+                    tryNextLink(links, 0, proxy, html, currentMovieData, currentNetwork, currentActivity);
                 } else {
-                    console.log('❌ Фильм не найден, пробуем следующий прокси');
+                    console.log('❌ Ссылки не найдены');
                     tryNextProxy();
                 }
             } else {
-                console.log('❌ Пустой ответ, пробуем следующий прокси');
+                console.log('❌ Пустой ответ');
                 tryNextProxy();
             }
         }, function(error) {
@@ -92,60 +84,70 @@
         }, false, { dataType: 'text' });
     }
     
-    function searchOnAsilmedia(movieData) {
-        console.log('🔍 Поиск на Asilmedia для:', movieData.title);
-        
-        currentActivity = Lampa.Activity.active();
-        if (currentActivity && currentActivity.loader) currentActivity.loader(true);
-        
-        currentMovieData = movieData;
-        currentProxyIndex = 0;
-        
-        Lampa.Noty.show('Ищем на Asilmedia...');
-        tryNextProxy();
-    }
-    
-    function loadFilmPage(url, movieData, network, activity) {
-        console.log('📄 Загрузка страницы фильма:', url);
-        
-        network.silent(url, function(html) {
-            console.log('✅ Страница загружена, длина:', html.length);
-            
-            if (html && html.length > 1000) {
-                let playerMatch = html.match(/<iframe[^>]+src="([^"]+player[^"]*)"[^>]*>/i) ||
-                                 html.match(/player\.php[^"'\s]+/i);
-                
-                if (playerMatch) {
-                    let playerPath = playerMatch[1] || playerMatch[0];
-                    if (!playerPath.startsWith('http')) {
-                        playerPath = (playerPath.startsWith('/') ? '' : '/') + playerPath;
-                    }
-                    
-                    // Для плеера используем тот же прокси
-                    let proxy = url.split('/').slice(0, 3).join('/'); // Берем базовый URL прокси
-                    let playerUrl = proxy + playerPath;
-                    console.log('🎮 Загружаем плеер:', playerUrl);
-                    loadPlayerPage(playerUrl, movieData, network, activity);
-                    return;
-                }
-                
-                let directMatch = html.match(/<source[^>]+src="([^"]+\.(mp4|m3u8)[^"]*)"[^>]*>/i) ||
-                                html.match(/file:\s*["']([^"']+\.(mp4|m3u8)[^"']*)["']/i);
-                
-                if (directMatch && directMatch[1]) {
-                    console.log('🎥 Найдено видео:', directMatch[1]);
-                    playVideo(directMatch[1], movieData.title);
-                    if (activity && activity.loader) activity.loader(false);
-                } else {
-                    console.log('❌ Плеер не найден');
-                    if (activity && activity.loader) activity.loader(false);
-                    Lampa.Noty.show('Плеер не найден');
-                }
-            }
-        }, function(error) {
-            console.log('❌ Ошибка загрузки страницы');
+    function tryNextLink(links, index, proxy, searchHtml, movieData, network, activity) {
+        if (index >= links.length) {
+            console.log('❌ Все ссылки перепробованы');
             if (activity && activity.loader) activity.loader(false);
-            Lampa.Noty.show('Ошибка загрузки страницы');
+            Lampa.Noty.show('Не удалось найти страницу с видео');
+            return;
+        }
+        
+        let link = links[index];
+        console.log(`🔗 Пробуем ссылку ${index + 1}/${links.length}:`, link);
+        
+        let filmPath = link;
+        if (!filmPath.startsWith('http')) {
+            filmPath = (filmPath.startsWith('/') ? '' : '/') + filmPath;
+        }
+        
+        // Извлекаем базовый прокси (без параметров)
+        let baseProxy = proxy.split('?')[0];
+        if (baseProxy.includes('allorigins')) {
+            baseProxy = 'https://api.allorigins.win/raw?url=http://asilmedia.org';
+        }
+        
+        let filmUrl = baseProxy + filmPath;
+        console.log('🎬 Загружаем страницу:', filmUrl);
+        
+        network.silent(filmUrl, function(html) {
+            console.log(`✅ Страница загружена, длина:`, html.length);
+            
+            // Ищем плеер на странице
+            let playerMatch = html.match(/<iframe[^>]+src="([^"]+player[^"]*)"[^>]*>/i) ||
+                             html.match(/player\.php[^"'\s]+/i) ||
+                             html.match(/data-player="([^"]+)"/i) ||
+                             html.match(/data-url="([^"]+)"/i);
+            
+            if (playerMatch) {
+                let playerPath = playerMatch[1] || playerMatch[0];
+                if (!playerPath.startsWith('http')) {
+                    playerPath = (playerPath.startsWith('/') ? '' : '/') + playerPath;
+                }
+                
+                let playerUrl = baseProxy + playerPath;
+                console.log('🎮 Найден плеер!');
+                loadPlayerPage(playerUrl, movieData, network, activity);
+                return;
+            }
+            
+            // Ищем прямую ссылку на видео
+            let videoMatch = html.match(/<source[^>]+src="([^"]+\.(mp4|m3u8)[^"]*)"[^>]*>/i) ||
+                            html.match(/file:\s*["']([^"']+\.(mp4|m3u8)[^"']*)["']/i) ||
+                            html.match(/video[^>]+src="([^"]+\.(mp4|m3u8)[^"]*)"[^>]*>/i);
+            
+            if (videoMatch && videoMatch[1]) {
+                console.log('🎥 Найдено видео!');
+                playVideo(videoMatch[1], movieData.title);
+                if (activity && activity.loader) activity.loader(false);
+                return;
+            }
+            
+            console.log('❌ Плеер не найден на этой странице, пробуем следующую');
+            tryNextLink(links, index + 1, proxy, searchHtml, movieData, network, activity);
+            
+        }, function(error) {
+            console.log('❌ Ошибка загрузки страницы, пробуем следующую');
+            tryNextLink(links, index + 1, proxy, searchHtml, movieData, network, activity);
         }, false, { dataType: 'text' });
     }
     
@@ -189,6 +191,19 @@
             url: url,
             title: title
         });
+    }
+
+    function searchOnAsilmedia(movieData) {
+        console.log('🔍 Поиск на Asilmedia для:', movieData.title);
+        
+        currentActivity = Lampa.Activity.active();
+        if (currentActivity && currentActivity.loader) currentActivity.loader(true);
+        
+        currentMovieData = movieData;
+        currentProxyIndex = 0;
+        
+        Lampa.Noty.show('Ищем на Asilmedia...');
+        tryNextProxy();
     }
 
     function addButton() {
