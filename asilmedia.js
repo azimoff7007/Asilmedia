@@ -1,5 +1,5 @@
-// Asilmedia плагин для Lampa - РАБОЧАЯ ВЕРСИЯ
-// Версия 11.0 - пробует все найденные ссылки
+// Asilmedia плагин для Lampa - ПОЛНАЯ ОТЛАДКА
+// Версия 12.0 - показывает все найденные ссылки
 
 (function() {
     console.log('🚀 Asilmedia: Запуск плагина');
@@ -65,7 +65,16 @@
                 }
                 
                 console.log('🔗 Найдено ссылок (всего):', links.length);
-                console.log('📋 Первые 10 ссылок:', links.slice(0, 10));
+                
+                // ВАЖНО: ВЫВОДИМ ВСЕ НАЙДЕННЫЕ ССЫЛКИ
+                console.log('📋 ПОЛНЫЙ СПИСОК ССЫЛОК:');
+                if (links.length > 0) {
+                    links.forEach(function(link, index) {
+                        console.log(`  ${index + 1}. ${link}`);
+                    });
+                } else {
+                    console.log('  Ссылки не найдены');
+                }
                 
                 if (links.length > 0) {
                     // Пробуем каждую ссылку по очереди
@@ -104,6 +113,8 @@
         let baseProxy = proxy.split('?')[0];
         if (baseProxy.includes('allorigins')) {
             baseProxy = 'https://api.allorigins.win/raw?url=http://asilmedia.org';
+        } else if (baseProxy.includes('corsproxy')) {
+            baseProxy = 'https://corsproxy.io/?http://asilmedia.org';
         }
         
         let filmUrl = baseProxy + filmPath;
