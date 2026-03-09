@@ -1,8 +1,8 @@
-// Asilmedia плагин для Lampa - ФИНАЛЬНАЯ ВЕРСИЯ 2.0
-// Версия 15.0 - правильная фильтрация ссылок
+// Asilmedia плагин для Lampa - ФИНАЛЬНАЯ ВЕРСИЯ 3.0
+// Версия 16.0 - правильный выбор ссылки
 
 (function() {
-    console.log('🚀 Asilmedia: Запуск финальной версии 2.0');
+    console.log('🚀 Asilmedia: Запуск финальной версии 3.0');
     
     const proxies = [
         'https://corsproxy.io/?http://asilmedia.org',
@@ -15,7 +15,6 @@
     let currentMovieData = null;
     
     function getSearchTitle(movieData) {
-        // Используем английское название
         if (movieData.original_title) {
             console.log('📝 Оригинальное название:', movieData.original_title);
             return movieData.original_title;
@@ -61,43 +60,25 @@
                 
                 console.log('🔗 Всего ссылок на странице:', allLinks.length);
                 
-                // ФИЛЬТРУЕМ ТОЛЬКО ССЫЛКИ НА КОНКРЕТНЫЕ ФИЛЬМЫ
+                // Ищем ТОЛЬКО ссылки на конкретные фильмы
+                // Формат из HAR: /9140-interstellar-uzbek-tarjima-2014-hd-ozbek-tilida-tas-ix-skachat.html
                 let filmLinks = allLinks.filter(function(url) {
-                    // Исключаем все служебные ссылки
-                    if (url.includes('facebook.com')) return false;
-                    if (url.includes('twitter.com')) return false;
-                    if (url.includes('pinterest.com')) return false;
-                    if (url.includes('vk.com')) return false;
-                    if (url.includes('oauth')) return false;
-                    if (url.includes('do=')) return false;
-                    if (url.includes('#')) return false;
-                    if (url.includes('javascript')) return false;
-                    if (url === '/whatchnow.html') return false;
-                    if (url === '/popular.html') return false;
-                    
-                    // Исключаем ссылки на разделы (категории)
-                    if (url.includes('/films/')) return false;
-                    if (url.includes('/category/')) return false;
-                    
-                    // Оставляем только ссылки, которые выглядят как страницы фильмов:
-                    // 1. Содержат .html в конце
-                    // 2. Не являются корневыми страницами
-                    // 3. Имеют ID в URL (цифры)
-                    if (url.includes('.html') && 
-                        !url.endsWith('.html') && 
-                        url.match(/\d+-[a-z-]+\.html/)) {
-                        return true;
-                    }
-                    
-                    return false;
+                    // Проверяем, что это ссылка на страницу фильма:
+                    // 1. Содержит .html в конце
+                    // 2. Содержит ID (цифры) в начале пути
+                    // 3. Содержит "tarjima" в названии
+                    return url.includes('.html') && 
+                           url.match(/\d+-[a-z-]+-tarjima/);
                 });
                 
                 console.log('🎬 Найдено ссылок на фильмы:', filmLinks.length);
                 console.log('📋 Ссылки на фильмы:', filmLinks);
                 
                 if (filmLinks.length > 0) {
-                    // Берем первую ссылку на фильм
+                    // Берем ПЕРВУЮ ссылку на фильм (она уже отфильтрована)
                     let filmPath = filmLinks[0];
+                    console.log('✅ Выбрана ссылка:', filmPath);
+                    
                     if (!filmPath.startsWith('http')) {
                         filmPath = (filmPath.startsWith('/') ? '' : '/') + filmPath;
                     }
@@ -134,7 +115,6 @@
             if (html && html.length > 1000) {
                 // Ищем URL плеера
                 let playerMatch = html.match(/<iframe[^>]+src="([^"]+player[^"]*)"[^>]*>/i) ||
-                                 html.match(/player\.php[^"'\s]+/i) ||
                                  html.match(/src="([^"]*\/player\/player\.html\?[^"]*)"/i);
                 
                 if (playerMatch) {
@@ -156,16 +136,6 @@
                 if (videoConfigMatch && videoConfigMatch[1]) {
                     console.log('🎥 Найдено видео в конфигурации:', videoConfigMatch[1]);
                     playVideo(videoConfigMatch[1], movieData.title);
-                    if (activity && activity.loader) activity.loader(false);
-                    return;
-                }
-                
-                // Ищем прямую ссылку на видео в HTML
-                let videoSourceMatch = html.match(/<source[^>]+src="([^"]+\.(mp4|m3u8)[^"]*)"[^>]*>/i);
-                
-                if (videoSourceMatch && videoSourceMatch[1]) {
-                    console.log('🎥 Найдено видео в HTML:', videoSourceMatch[1]);
-                    playVideo(videoSourceMatch[1], movieData.title);
                     if (activity && activity.loader) activity.loader(false);
                     return;
                 }
