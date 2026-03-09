@@ -1,5 +1,6 @@
 // Asilmedia плагин для Lampa
 // Версия 1.0
+// GitHub: https://github.com/ВАШ_ЛОГИН/lampa-asilmedia-plugin
 
 (function() {
     // Проверяем, загружена ли Lampa
@@ -7,6 +8,8 @@
         console.error('Lampa не найдена');
         return;
     }
+
+    console.log('📺 Загрузка Asilmedia плагина...');
 
     // Создаем класс для работы с Asilmedia
     function AsilmediaSource(component, data) {
@@ -24,32 +27,35 @@
             object = _object;
             let title = object.movie.title;
             
+            console.log('Поиск на Asilmedia:', title);
             component.loading(true);
             
-            // Простой поиск по названию
+            // Поиск по названию
             let searchUrl = proxy + baseUrl + '/?do=search&subaction=search&story=' + encodeURIComponent(title);
             
             network.silent(searchUrl, function(html) {
-                if (html) {
+                if (html && html.length > 100) {
                     // Ищем первый результат
-                    let linkMatch = html.match(/<a[^>]+href="([^"]+)"[^>]+class="title"[^>]*>/i);
+                    let linkMatch = html.match(/<a[^>]+href="([^"]+)"[^>]*class="[^"]*title[^"]*"[^>]*>/i) || 
+                                   html.match(/<h2[^>]*><a[^>]+href="([^"]+)"[^>]*>/i);
                     
                     if (linkMatch && linkMatch[1]) {
                         let filmUrl = linkMatch[1];
                         if (!filmUrl.startsWith('http')) {
-                            filmUrl = baseUrl + filmUrl;
+                            filmUrl = baseUrl + (filmUrl.startsWith('/') ? '' : '/') + filmUrl;
                         }
+                        console.log('Найдена страница фильма:', filmUrl);
                         loadFilmPage(filmUrl);
                     } else {
-                        component.emptyForQuery(title);
+                        component.empty('Ничего не найдено на Asilmedia');
                         component.loading(false);
                     }
                 } else {
-                    component.emptyForQuery(title);
+                    component.empty('Сайт Asilmedia недоступен');
                     component.loading(false);
                 }
             }, function(a, c) {
-                component.empty('Ошибка соединения');
+                component.empty('Ошибка соединения с Asilmedia');
                 component.loading(false);
             }, false, { dataType: 'text' });
         };
@@ -58,73 +64,83 @@
             network.silent(proxy + url, function(html) {
                 if (html) {
                     // Ищем плеер
-                    let playerMatch = html.match(/<iframe[^>]+src="([^"]+player[^"]*)"[^>]*>/i);
+                    let playerMatch = html.match(/<iframe[^>]+src="([^"]+player[^"]*)"[^>]*>/i) ||
+                                     html.match(/player\.php[^"'\s]+/i);
                     
-                    if (playerMatch && playerMatch[1]) {
-                        let playerUrl = playerMatch[1];
+                    if (playerMatch) {
+                        let playerUrl = playerMatch[1] || playerMatch[0];
                         if (!playerUrl.startsWith('http')) {
-                            playerUrl = baseUrl + playerUrl;
+                            playerUrl = baseUrl + (playerUrl.startsWith('/') ? '' : '/') + playerUrl;
                         }
+                        console.log('Найден плеер:', playerUrl);
                         loadPlayerPage(playerUrl);
                     } else {
-                        component.empty('Плеер не найден');
-                        component.loading(false);
+                        // Может быть прямая ссылка на видео
+                        let videoDirect = html.match(/href="([^"]+\.(mp4|m3u8)[^"]*)"[^>]*>Смотреть/i) ||
+                                         html.match(/source src="([^"]+\.(mp4|m3u8)[^"]*)"/i);
+                        
+                        if (videoDirect && videoDirect[1]) {
+                            showVideo(videoDirect[1]);
+                        } else {
+                            component.empty('Плеер не найден на странице');
+                            component.loading(false);
+                        }
                     }
                 } else {
-                    component.emptyForQuery(object.movie.title);
+                    component.empty('Не удалось загрузить страницу фильма');
                 }
             }, function(a, c) {
-                component.empty('Ошибка загрузки страницы');
+                component.empty('Ошибка загрузки страницы фильма');
             }, false, { dataType: 'text' });
         }
 
         function loadPlayerPage(url) {
             network.silent(proxy + url, function(html) {
                 if (html) {
-                    // Ищем видео
+                    // Ищем видео в разных форматах
                     let videoMatch = html.match(/file["']?\s*:\s*["']([^"']+\.(mp4|m3u8)[^"']*)["']/i) || 
-                                    html.match(/<source[^>]+src="([^"]+\.(mp4|m3u8)[^"]*)"[^>]*>/i);
+                                    html.match(/<source[^>]+src="([^"]+\.(mp4|m3u8)[^"]*)"[^>]*>/i) ||
+                                    html.match(/video[^>]+src="([^"]+\.(mp4|m3u8)[^"]*)"[^>]*>/i);
                     
                     if (videoMatch && videoMatch[1]) {
-                        extract = {
-                            source: {
-                                hls: videoMatch[1],
-                                audio: { names: ['Оригинал'] }
-                            },
-                            title: object.movie.title
-                        };
-                        
-                        showResults();
+                        let videoUrl = videoMatch[1];
+                        console.log('Найдено видео:', videoUrl);
+                        showVideo(videoUrl);
                     } else {
-                        component.empty('Видео не найдено');
+                        component.empty('Видео не найдено в плеере');
+                        component.loading(false);
                     }
+                } else {
+                    component.empty('Не удалось загрузить плеер');
                 }
-                component.loading(false);
             }, function(a, c) {
                 component.empty('Ошибка загрузки плеера');
             }, false, { dataType: 'text' });
         }
 
-        function showResults() {
+        function showVideo(videoUrl) {
             component.reset();
             
+            // Создаем элемент для плеера
             let item = Lampa.Template.get('online', {
-                file: extract.source.hls,
-                title: extract.title,
-                quality: '',
-                info: 'Asilmedia'
+                file: videoUrl,
+                title: object.movie.title,
+                quality: 'Asilmedia',
+                info: 'Оригинал'
             });
             
             item.on('hover:enter', function() {
                 Lampa.Player.play({
-                    url: extract.source.hls,
-                    title: extract.title
+                    url: videoUrl,
+                    title: object.movie.title
                 });
             });
             
             component.append(item);
             component.start(true);
             component.loading(false);
+            
+            console.log('✅ Видео готово к просмотру');
         }
 
         // Обязательные методы
@@ -136,40 +152,60 @@
         };
     }
 
-    // Ждем загрузки Lampa
+    // Функция для добавления в Lampa
     function initPlugin() {
-        if (!Lampa.Component) return setTimeout(initPlugin, 100);
-        
-        // Добавляем переводы
-        if (Lampa.Lang && Lampa.Lang.add) {
-            Lampa.Lang.add({
-                asilmedia_source: { ru: 'Asilmedia', uk: 'Asilmedia', en: 'Asilmedia' }
-            });
+        if (!Lampa.Component) {
+            setTimeout(initPlugin, 100);
+            return;
         }
         
-        // Сохраняем оригинальный компонент
-        let originalComponent = Lampa.Component.get('online');
-        
-        // Создаем новый компонент
-        Lampa.Component.add('online', function(object) {
-            // Создаем оригинальный компонент
-            let component = new originalComponent(object);
+        try {
+            // Добавляем перевод
+            if (Lampa.Lang && Lampa.Lang.add) {
+                Lampa.Lang.add({
+                    asilmedia_source: { 
+                        ru: 'Asilmedia', 
+                        uk: 'Asilmedia', 
+                        en: 'Asilmedia' 
+                    }
+                });
+            }
             
-            // Добавляем наш источник
-            if (component.sources) {
+            // Сохраняем оригинальный компонент
+            let OriginalOnline = Lampa.Component.get('online');
+            
+            if (!OriginalOnline) {
+                console.log('Ожидание загрузки Online компонента...');
+                setTimeout(initPlugin, 500);
+                return;
+            }
+            
+            // Создаем новый компонент
+            Lampa.Component.add('online', function(object) {
+                // Создаем экземпляр оригинального компонента
+                let component = new OriginalOnline(object);
+                
+                // Добавляем наш источник
+                if (!component.sources) component.sources = {};
                 component.sources.asilmedia = new AsilmediaSource(component, object);
-            }
+                
+                // Расширяем список источников
+                if (!component.filter_sources) component.filter_sources = [];
+                if (component.filter_sources.indexOf('asilmedia') === -1) {
+                    component.filter_sources.push('asilmedia');
+                }
+                
+                return component;
+            });
             
-            // Расширяем список источников
-            if (component.filter_sources) {
-                component.filter_sources.push('asilmedia');
-            }
+            console.log('✅ Asilmedia плагин успешно загружен!');
+            console.log('📺 Источник добавлен в список балансеров');
             
-            return component;
-        });
-        
-        console.log('✅ Asilmedia плагин загружен');
+        } catch (e) {
+            console.error('❌ Ошибка загрузки плагина:', e);
+        }
     }
 
+    // Запускаем инициализацию
     initPlugin();
 })();
