@@ -1,8 +1,8 @@
-// Asilmedia плагин для Lampa - ФИНАЛЬНАЯ ВЕРСИЯ 3.0
-// Версия 16.0 - правильный выбор ссылки
+// Asilmedia плагин для Lampa - ОТЛАДОЧНАЯ ВЕРСИЯ
+// Версия 17.0 - показывает все ссылки для анализа
 
 (function() {
-    console.log('🚀 Asilmedia: Запуск финальной версии 3.0');
+    console.log('🚀 Asilmedia: Запуск отладочной версии');
     
     const proxies = [
         'https://corsproxy.io/?http://asilmedia.org',
@@ -44,6 +44,10 @@
             console.log(`✅ Прокси ${currentProxyIndex} ответил, длина:`, html ? html.length : 0);
             
             if (html && html.length > 1000) {
+                // Сохраняем HTML для анализа
+                console.log('📄 ПЕРВЫЕ 1000 СИМВОЛОВ HTML:');
+                console.log(html.substring(0, 1000));
+                
                 // Ищем ВСЕ ссылки на странице
                 let allLinks = [];
                 let linkMatches = html.match(/<a[^>]+href="([^"]+)"[^>]*>/gi);
@@ -58,42 +62,49 @@
                     });
                 }
                 
-                console.log('🔗 Всего ссылок на странице:', allLinks.length);
-                
-                // Ищем ТОЛЬКО ссылки на конкретные фильмы
-                // Формат из HAR: /9140-interstellar-uzbek-tarjima-2014-hd-ozbek-tilida-tas-ix-skachat.html
-                let filmLinks = allLinks.filter(function(url) {
-                    // Проверяем, что это ссылка на страницу фильма:
-                    // 1. Содержит .html в конце
-                    // 2. Содержит ID (цифры) в начале пути
-                    // 3. Содержит "tarjima" в названии
-                    return url.includes('.html') && 
-                           url.match(/\d+-[a-z-]+-tarjima/);
+                console.log('🔗 ВСЕГО ССЫЛОК НА СТРАНИЦЕ:', allLinks.length);
+                console.log('📋 ПОЛНЫЙ СПИСОК ВСЕХ ССЫЛОК:');
+                allLinks.forEach(function(link, index) {
+                    console.log(`  ${index + 1}. ${link}`);
                 });
                 
-                console.log('🎬 Найдено ссылок на фильмы:', filmLinks.length);
-                console.log('📋 Ссылки на фильмы:', filmLinks);
+                // Попробуем найти ссылки на фильмы разными способами
+                console.log('🔍 ПОИСК ССЫЛОК ПО РАЗНЫМ ПАТТЕРНАМ:');
                 
-                if (filmLinks.length > 0) {
-                    // Берем ПЕРВУЮ ссылку на фильм (она уже отфильтрована)
-                    let filmPath = filmLinks[0];
-                    console.log('✅ Выбрана ссылка:', filmPath);
+                // Паттерн 1: ссылки с .html
+                let htmlLinks = allLinks.filter(url => url.includes('.html'));
+                console.log('📌 Ссылки с .html:', htmlLinks.length);
+                htmlLinks.forEach(l => console.log('  ', l));
+                
+                // Паттерн 2: ссылки с цифрами
+                let numberLinks = allLinks.filter(url => url.match(/\d+/));
+                console.log('📌 Ссылки с цифрами:', numberLinks.length);
+                numberLinks.forEach(l => console.log('  ', l));
+                
+                // Паттерн 3: длинные ссылки (>20 символов)
+                let longLinks = allLinks.filter(url => url.length > 20 && !url.includes('facebook') && !url.includes('twitter'));
+                console.log('📌 Длинные ссылки (>20):', longLinks.length);
+                longLinks.forEach(l => console.log('  ', l));
+                
+                if (htmlLinks.length > 0) {
+                    // Для теста возьмем первую ссылку с .html
+                    let testLink = htmlLinks[0];
+                    console.log('🎬 Пробуем загрузить тестовую ссылку:', testLink);
                     
-                    if (!filmPath.startsWith('http')) {
-                        filmPath = (filmPath.startsWith('/') ? '' : '/') + filmPath;
+                    if (!testLink.startsWith('http')) {
+                        testLink = (testLink.startsWith('/') ? '' : '/') + testLink;
                     }
                     
                     let baseProxy = proxy.split('?')[0];
-                    // Исправляем возможные двойные слеши
                     baseProxy = baseProxy.replace(/\/$/, '');
-                    filmPath = filmPath.replace(/^\//, '');
+                    testLink = testLink.replace(/^\//, '');
                     
-                    let filmUrl = baseProxy + '/' + filmPath;
-                    console.log('📄 Загружаем страницу фильма:', filmUrl);
-                    Lampa.Noty.show('Фильм найден! Загружаем...');
+                    let filmUrl = baseProxy + '/' + testLink;
+                    console.log('📄 Загружаем тестовую страницу:', filmUrl);
+                    Lampa.Noty.show('Пробуем загрузить страницу...');
                     loadFilmPage(filmUrl, currentMovieData, currentNetwork, baseProxy, currentActivity);
                 } else {
-                    console.log('❌ Ссылки на фильмы не найдены, пробуем следующий прокси');
+                    console.log('❌ Нет ссылок с .html');
                     tryNextProxy();
                 }
             } else {
@@ -113,36 +124,42 @@
             console.log('✅ Страница фильма загружена, длина:', html.length);
             
             if (html && html.length > 1000) {
+                // Сохраняем HTML страницы для анализа
+                console.log('📄 ПЕРВЫЕ 1000 СИМВОЛОВ СТРАНИЦЫ:');
+                console.log(html.substring(0, 1000));
+                
                 // Ищем URL плеера
                 let playerMatch = html.match(/<iframe[^>]+src="([^"]+player[^"]*)"[^>]*>/i) ||
                                  html.match(/src="([^"]*\/player\/player\.html\?[^"]*)"/i);
                 
                 if (playerMatch) {
                     let playerPath = playerMatch[1] || playerMatch[0];
+                    console.log('🎮 Найден плеер:', playerPath);
+                    
                     if (!playerPath.startsWith('http')) {
                         playerPath = (playerPath.startsWith('/') ? '' : '/') + playerPath;
                     }
                     
                     playerPath = playerPath.replace(/^\//, '');
                     let playerUrl = baseProxy + '/' + playerPath;
-                    console.log('🎮 Найден плеер:', playerUrl);
+                    console.log('🎮 Загружаем плеер:', playerUrl);
                     loadPlayerPage(playerUrl, movieData, network, activity);
                     return;
                 }
                 
-                // Ищем прямую ссылку на видео в JavaScript конфигурации
-                let videoConfigMatch = html.match(/file["']?\s*:\s*["']([^"']+\.(mp4|m3u8)[^"']*)["']/i);
+                // Ищем прямую ссылку на видео
+                let videoMatch = html.match(/file["']?\s*:\s*["']([^"']+\.(mp4|m3u8)[^"']*)["']/i) ||
+                                html.match(/<source[^>]+src="([^"]+\.(mp4|m3u8)[^"]*)"[^>]*>/i);
                 
-                if (videoConfigMatch && videoConfigMatch[1]) {
-                    console.log('🎥 Найдено видео в конфигурации:', videoConfigMatch[1]);
-                    playVideo(videoConfigMatch[1], movieData.title);
+                if (videoMatch && videoMatch[1]) {
+                    console.log('🎥 Найдено видео:', videoMatch[1]);
+                    playVideo(videoMatch[1], movieData.title);
                     if (activity && activity.loader) activity.loader(false);
-                    return;
+                } else {
+                    console.log('❌ Плеер не найден на странице');
+                    if (activity && activity.loader) activity.loader(false);
+                    Lampa.Noty.show('Плеер не найден');
                 }
-                
-                console.log('❌ Плеер не найден на странице');
-                if (activity && activity.loader) activity.loader(false);
-                Lampa.Noty.show('Плеер не найден');
             }
         }, function(error) {
             console.log('❌ Ошибка загрузки страницы');
@@ -158,7 +175,9 @@
             console.log('✅ Плеер загружен, длина:', html.length);
             
             if (html && html.length > 100) {
-                // Ищем видео в конфигурации плеера
+                console.log('📄 ПЕРВЫЕ 500 СИМВОЛОВ ПЛЕЕРА:');
+                console.log(html.substring(0, 500));
+                
                 let videoMatch = html.match(/file["']?\s*:\s*["']([^"']+\.(mp4|m3u8)[^"']*)["']/i) ||
                                 html.match(/<source[^>]+src="([^"]+\.(mp4|m3u8)[^"]*)"[^>]*>/i);
                 
